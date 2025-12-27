@@ -26,8 +26,6 @@ func parseRESP(reader *bufio.Reader) ([]string, error) {
 	// RESP uses first character to identify type
 	firstChar := line[0]
 
-	fmt.Printf("DEBUG: Received line: %q, first char: %c\n", line, firstChar)
-
 	switch firstChar {
 	case '*':
 		// Array - this is what we need for commands
@@ -45,8 +43,6 @@ func parseArray(reader *bufio.Reader, line string) ([]string, error) {
 		return nil, fmt.Errorf("invalid array length: %s", countStr)
 	}
 
-	fmt.Printf("DEBUG: Array has %d elements\n", count)
-
 	// Create a slice to hold the results
 	result := make([]string, count)
 
@@ -57,7 +53,6 @@ func parseArray(reader *bufio.Reader, line string) ([]string, error) {
 			return nil, err
 		}
 		result[i] = element
-		fmt.Printf("DEBUG: Element %d: %s\n", i, element)
 	}
 
 	return result, nil
@@ -71,7 +66,6 @@ func parseBulkString(reader *bufio.Reader) (string, error) {
 	}
 
 	line = strings.TrimSpace(line)
-	fmt.Printf("DEBUG: Bulk string line: %q\n", line)
 
 	// Check it starts with $
 	if line[0] != '$' {

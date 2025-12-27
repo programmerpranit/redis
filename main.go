@@ -12,6 +12,7 @@ var store *Store
 
 func main() {
 
+	// Create store
 	store = NewStore()
 
 	// Listen on TCP port 6379 (Redis default port)
@@ -92,7 +93,18 @@ func executeCommand(args []string) string {
 		}
 		key := args[1]
 		value := args[2]
-		store.Set(key, value)
+
+		var err error
+
+		err = store.wal.WriteEntry("SET", key, value)
+		if err != nil {
+			return fmt.Sprintf("-ERR %s\r\n", err)
+		}
+
+		err = store.Set(key, value)
+		if err != nil {
+			return fmt.Sprintf("-ERR %s\r\n", err)
+		}
 		return "+OK\r\n"
 
 	case "GET":
@@ -105,6 +117,21 @@ func executeCommand(args []string) string {
 			return "$-1\r\n" // Null bulk string in RESP
 		}
 		return fmt.Sprintf("$%d\r\n%s\r\n", len(value), value)
+
+	case "DEL":
+		if len(args) < 2 {
+			return "-ERR wrong number of arguments for 'del' command\r\n"
+		}
+		key := args[1]
+
+		err := store.wal.WriteEntry("DEL", key, "")
+		if err != nil {
+			return fmt.Sprintf("-ERR %s\r\n", err)
+		}
+
+		store.Delete(key)
+
+		return "+OK\r\n"
 
 	default:
 		return fmt.Sprintf("-ERR unknown command '%s'\r\n", command)
