@@ -92,9 +92,13 @@ func (store *LSMStore) Close() error {
 
 func (store *LSMStore) Get(key string) ([]byte, bool) {
 
-	store.mu.RLock()
+	fmt.Println("Getting key:", key)
 
-	defer store.mu.RUnlock()
+	store.PrintStats()
+
+	// store.mu.RLock()
+
+	// defer store.mu.RUnlock()
 
 	fmt.Println("Getting key:", key)
 
@@ -211,7 +215,7 @@ func (store *LSMStore) flushImmutableMemTable() {
 
 	// flush the memetable
 
-	path := fmt.Sprintf("%s/sstable-%d.sst", store.dataDir, sstableID)
+	path := fmt.Sprintf("%s/sstable-%d.db", store.dataDir, sstableID)
 
 	err := FlushMemTableToSSTable(memtableToFlush, path)
 	if err != nil {
@@ -343,7 +347,7 @@ func (store *LSMStore) Compact() error {
 	// create new sstable filename
 	newId := store.nextSSTableID
 	store.nextSSTableID++
-	outputPath := fmt.Sprintf("%s/sstable-%d.sst", store.dataDir, newId)
+	outputPath := fmt.Sprintf("%s/sstable-%d.db", store.dataDir, newId)
 
 	// get old sstables
 	oldSSTables := store.sstables

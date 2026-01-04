@@ -191,13 +191,13 @@ func WriteFooter(file *os.File, indexStartOffset int64, numberOfEntries int64) (
 	}
 	bytesWritten += 8
 
-	err = binary.Write(file, binary.LittleEndian, Version)
+	err = binary.Write(file, binary.LittleEndian, uint32(Version))
 	if err != nil {
 		return bytesWritten, fmt.Errorf("failed to write version: %v", err)
 	}
 	bytesWritten += 4
 
-	err = binary.Write(file, binary.LittleEndian, MagicNumber)
+	err = binary.Write(file, binary.LittleEndian, uint32(MagicNumber))
 	if err != nil {
 		return bytesWritten, fmt.Errorf("failed to write bytes written: %v", err)
 	}
