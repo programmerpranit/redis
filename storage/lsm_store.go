@@ -11,6 +11,10 @@ import (
 	"time"
 )
 
+const (
+	CompactionThreshold = 5 // Compact when 5+ SSTables exist
+)
+
 type LSMStore struct {
 	// In-Memory MemTable
 	memTable          *MemTable
@@ -23,17 +27,27 @@ type LSMStore struct {
 	dataDir       string
 	nextSSTableID int
 
+	WAL *WAL
+
 	mu sync.RWMutex
 }
 
 func NewLSMStore(memtableSize int64, dataDir string) (*LSMStore, error) {
+
+	fmt.Println("Creating LSM Store...")
 
 	if memtableSize <= 0 {
 		memtableSize = DefaultMemTableSize
 	}
 
 	if dataDir == "" {
-		dataDir = "database"
+		dataDir = "data"
+	}
+
+	wal, err := NewWAL("wal.log")
+	if err != nil {
+		fmt.Println("Error creating WAL:", err)
+		return nil, err
 	}
 
 	store := &LSMStore{
@@ -43,12 +57,19 @@ func NewLSMStore(memtableSize int64, dataDir string) (*LSMStore, error) {
 		memtableSize:      memtableSize,
 		dataDir:           dataDir,
 		nextSSTableID:     0,
+		WAL:               wal,
 	}
 
 	// Load existing SSTables from disk
-	err := store.loadSSTables()
+	err = store.loadSSTables()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load sstables: %w", err)
+	}
+
+	err = wal.Recover(store)
+	if err != nil {
+		fmt.Println("Error recovering WAL:", err)
+		return nil, err
 	}
 
 	return store, nil
@@ -72,10 +93,16 @@ func (store *LSMStore) Close() error {
 func (store *LSMStore) Get(key string) ([]byte, bool) {
 
 	store.mu.RLock()
+
 	defer store.mu.RUnlock()
+
+	fmt.Println("Getting key:", key)
 
 	// Check MemTable
 	value, found := store.memTable.Get(key)
+
+	fmt.Println("MemTable value:", value, found)
+
 	if found {
 		return value, true
 	}
@@ -205,6 +232,8 @@ func (store *LSMStore) flushImmutableMemTable() {
 	store.immutableMemTable = nil
 
 	fmt.Printf("flushed immutable memtable to sstable: %s\n", path)
+
+	store.maybeCompact()
 }
 
 func extractSSTableId(fileName string) int {
@@ -298,4 +327,65 @@ func (store *LSMStore) PrintStats() {
 	fmt.Printf("Number of SSTables: %d\n", stats["num_sstables"])
 	fmt.Printf("Total SSTable Entries: %d\n", stats["sstable_total_entries"])
 	fmt.Println("======================")
+}
+
+func (store *LSMStore) Compact() error {
+	store.mu.Lock()
+
+	// If there is only one sstable, nothing to compact
+	if len(store.sstables) <= 1 {
+		store.mu.Unlock()
+		return nil
+	}
+
+	fmt.Println("Starting compaction...")
+
+	// create new sstable filename
+	newId := store.nextSSTableID
+	store.nextSSTableID++
+	outputPath := fmt.Sprintf("%s/sstable-%d.sst", store.dataDir, newId)
+
+	// get old sstables
+	oldSSTables := store.sstables
+
+	store.mu.Unlock()
+
+	// compact sstables
+	newSSTablePath, err := CompactSSTables(oldSSTables, outputPath)
+	if err != nil {
+		return fmt.Errorf("failed to compact sstables: %v", err)
+	}
+
+	// open new sstable
+	newSSTable, err := OpenSSTable(newSSTablePath)
+	if err != nil {
+		return fmt.Errorf("failed to open new sstable: %v", err)
+	}
+
+	store.mu.Lock()
+	defer store.mu.Unlock()
+
+	store.sstables = []*SSTable{newSSTable}
+
+	for _, sst := range oldSSTables {
+		filePath := sst.FilePath()
+		sst.Close()
+		os.Remove(filePath)
+		fmt.Printf("✓ Deleted old SSTable: %s\n\n", filePath)
+	}
+
+	fmt.Printf("✓ Compacted %d SSTables into %s\n\n", len(oldSSTables), newSSTablePath)
+
+	return nil
+}
+
+func (store *LSMStore) maybeCompact() {
+	store.mu.RLock()
+	numSSTables := len(store.sstables)
+	store.mu.RUnlock()
+
+	if numSSTables >= CompactionThreshold {
+		fmt.Println("Compaction threshold reached, starting compaction...")
+		go store.Compact() // Run in background
+	}
 }

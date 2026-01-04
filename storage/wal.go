@@ -1,4 +1,4 @@
-package main
+package storage
 
 import (
 	"bufio"
@@ -57,7 +57,7 @@ func (w *WAL) Close() error {
 	return w.file.Close()
 }
 
-func (w *WAL) Recover(store *Store) error {
+func (w *WAL) Recover(store *LSMStore) error {
 
 	// Open the file for reading
 	file, err := os.Open(w.path)
@@ -88,7 +88,7 @@ func (w *WAL) Recover(store *Store) error {
 
 		switch operation {
 		case "SET":
-			store.Set(key, value)
+			store.Set(key, []byte(value))
 		case "DEL":
 			store.Delete(key)
 		default:

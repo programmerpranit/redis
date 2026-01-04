@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"fmt"
 	"sort"
 	"sync"
 	"time"
@@ -125,6 +126,7 @@ func (mt *MemTable) Delete(key string) error {
 
 // Get retrieves a value by key
 func (mt *MemTable) Get(key string) ([]byte, bool) {
+	fmt.Println("Getting key from MemTable:", key)
 	mt.mu.RLock()
 	defer mt.mu.RUnlock()
 

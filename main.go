@@ -4,16 +4,27 @@ import (
 	"bufio"
 	"fmt"
 	"net"
+	"small-redis/storage"
 	"strings"
 )
 
 // Global store instance
-var store *Store
+var store *storage.LSMStore
 
 func main() {
 
 	// Create store
-	store = NewStore()
+	newStore, err := storage.NewLSMStore(500, "./data")
+
+	if err != nil {
+		fmt.Println("Error creating store:", err)
+		return
+	}
+
+	store = newStore
+
+	defer store.Close()
+	defer store.WAL.Close()
 
 	// Listen on TCP port 6379 (Redis default port)
 	listener, err := net.Listen("tcp", ":6380")
@@ -96,12 +107,12 @@ func executeCommand(args []string) string {
 
 		var err error
 
-		err = store.wal.WriteEntry("SET", key, value)
+		err = store.WAL.WriteEntry("SET", key, value)
 		if err != nil {
 			return fmt.Sprintf("-ERR %s\r\n", err)
 		}
 
-		err = store.Set(key, value)
+		err = store.Set(key, []byte(value))
 		if err != nil {
 			return fmt.Sprintf("-ERR %s\r\n", err)
 		}
@@ -124,7 +135,7 @@ func executeCommand(args []string) string {
 		}
 		key := args[1]
 
-		err := store.wal.WriteEntry("DEL", key, "")
+		err := store.WAL.WriteEntry("DEL", key, "")
 		if err != nil {
 			return fmt.Sprintf("-ERR %s\r\n", err)
 		}
